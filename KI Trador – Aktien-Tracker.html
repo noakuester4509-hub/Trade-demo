@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>KI Trador – Aktien-Tracker</title>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--tx:#14181f;--mu:#6b7380;--bd:#e2e5ea;--rd:#d92d3a;--gr:#14975a;--ac:#2a5bd7;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0f1217;--card:#181c24;--tx:#e8ebf0;--mu:#8b94a3;--bd:#272d38;--rd:#ff5a66;--gr:#3ed190;--ac:#6b9bff}}
+:root[data-theme="dark"]{--bg:#0f1217;--card:#181c24;--tx:#e8ebf0;--mu:#8b94a3;--bd:#272d38;--rd:#ff5a66;--gr:#3ed190;--ac:#6b9bff}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:14px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif}
+header{padding:16px;display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between}
+h1{font-size:20px;margin:0}
+.sub{color:var(--mu);font-size:12px}
+.bar{display:flex;flex-wrap:wrap;gap:8px;padding:0 16px 12px;align-items:center}
+button,input{font:inherit;color:var(--tx);background:var(--card);border:1px solid var(--bd);border-radius:8px;padding:7px 12px}
+button{cursor:pointer}
+button.on{background:var(--ac);color:#fff;border-color:var(--ac)}
+input[type=number]{width:64px}
+.wrap{display:grid;grid-template-columns:1fr 320px;gap:16px;padding:0 16px 24px}
+@media(max-width:860px){.wrap{grid-template-columns:1fr}}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:12px}
+.tbl{overflow-x:auto}
+table{width:100%;border-collapse:collapse;min-width:620px}
+th,td{padding:8px 10px;text-align:right;border-bottom:1px solid var(--bd);white-space:nowrap}
+th:nth-child(-n+3),td:nth-child(-n+3){text-align:left}
+th{color:var(--mu);font-weight:500;font-size:12px;position:sticky;top:0;background:var(--card)}
+tr:hover td{background:rgba(127,127,127,.07)}
+.dn{color:var(--rd)}.up{color:var(--gr)}
+.sel{font-weight:700}
+.side{padding:12px;max-height:80vh;overflow:auto}
+.side h2{font-size:15px;margin:0 0 8px}
+.al{border:1px solid var(--rd);border-radius:10px;padding:8px 10px;margin-bottom:8px;cursor:pointer}
+.al b{display:block}
+.empty{color:var(--mu)}
+#ov{position:fixed;inset:0;background:rgba(0,0,0,.5);display:none;align-items:center;justify-content:center;padding:16px;z-index:20}
+#ov.show{display:flex}
+.modal{background:var(--card);border:2px solid var(--rd);border-radius:14px;max-width:440px;width:100%;padding:18px}
+.modal h3{margin:0 0 4px;color:var(--rd)}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:12px 0}
+.grid div{background:var(--bg);border-radius:8px;padding:8px}
+.grid span{display:block;color:var(--mu);font-size:11px}
+.note{padding:0 16px 20px;color:var(--mu);font-size:12px}
+</style>
+</head>
+<body>
+<header>
+  <div><h1>KI Trador – Aktien-Tracker</h1><div class="sub" id="status"></div></div>
+  <button id="theme">Hell/Dunkel</button>
+</header>
+<div class="bar">
+  <button data-p="d" class="on">Heute</button>
+  <button data-p="w">Woche</button>
+  <button data-p="m">Monat</button>
+  <input id="q" placeholder="Suche (Name/Ticker)">
+  <label class="sub">Alarm ab −<input type="number" id="thr" value="5" min="1" max="30" step="0.5"> % am Tag</label>
+</div>
+<div class="wrap">
+  <div class="card tbl"><table>
+    <thead><tr><th>#</th><th>Ticker</th><th>Name</th><th>Kurs $</th><th>Heute</th><th>Woche</th><th>Monat</th></tr></thead>
+    <tbody id="rows"></tbody>
+  </table></div>
+  <aside class="card side"><h2>Alarmfenster (Tagesverlust)</h2><div id="alerts"><div class="empty">Noch keine Alarme.</div></div></aside>
+</div>
+<div class="note">Hinweis: Die Kurse in dieser Version sind simuliert (Demo-Daten). Echte Live-Kurse brauchen eine Datenquelle, siehe Funktion loadData() im Code.</div>
+
+<div id="ov"><div class="modal" id="modal"></div></div>
+
+<script>
+const RAW="AAPL:Apple:190,MSFT:Microsoft:420,NVDA:NVIDIA:130,GOOGL:Alphabet:175,AMZN:Amazon:185,META:Meta:500,BRK.B:Berkshire Hathaway:410,LLY:Eli Lilly:780,AVGO:Broadcom:160,TSLA:Tesla:250,JPM:JPMorgan:200,WMT:Walmart:68,V:Visa:275,XOM:Exxon Mobil:115,UNH:UnitedHealth:520,MA:Mastercard:460,ORCL:Oracle:125,PG:Procter & Gamble:165,JNJ:Johnson & Johnson:155,HD:Home Depot:350,COST:Costco:830,MRK:Merck:125,ABBV:AbbVie:175,CVX:Chevron:155,BAC:Bank of America:38,KO:Coca-Cola:62,NFLX:Netflix:640,AMD:AMD:160,PEP:PepsiCo:170,CRM:Salesforce:260,ADBE:Adobe:480,TMO:Thermo Fisher:580,LIN:Linde:440,WFC:Wells Fargo:58,MCD:McDonald's:290,CSCO:Cisco:50,ACN:Accenture:340,ABT:Abbott:105,DIS:Disney:100,GE:GE Aerospace:160,QCOM:Qualcomm:170,TXN:Texas Instruments:185,DHR:Danaher:250,VZ:Verizon:41,INTU:Intuit:640,CAT:Caterpillar:340,AMGN:Amgen:310,IBM:IBM:170,PFE:Pfizer:29,AMAT:Applied Materials:210,NOW:ServiceNow:760,ISRG:Intuitive Surgical:380,GS:Goldman Sachs:460,UBER:Uber:70,PM:Philip Morris:100,RTX:RTX:105,SPGI:S&P Global:430,CMCSA:Comcast:42,NEE:NextEra:75,LOW:Lowe's:230,UNP:Union Pacific:240,BKNG:Booking:3800,T:AT&T:18,HON:Honeywell:200,MS:Morgan Stanley:95,BLK:BlackRock:790,SYK:Stryker:340,ELV:Elevance:520,PGR:Progressive:210,LMT:Lockheed Martin:460,TJX:TJX:100,VRTX:Vertex:430,COP:ConocoPhillips:118,BA:Boeing:180,PLD:Prologis:110,MDT:Medtronic:85,ADP:ADP:250,C:Citigroup:62,REGN:Regeneron:950,BSX:Boston Scientific:72,MU:Micron:120,PANW:Palo Alto:310,SBUX:Starbucks:90,ADI:Analog Devices:225,GILD:Gilead:70,DE:Deere:380,CB:Chubb:260,MMC:Marsh McLennan:210,LRCX:Lam Research:900,KLAC:KLA:740,SHOP:Shopify:70,SNPS:Synopsys:550,MDLZ:Mondelez:70,SO:Southern Co:78,CI:Cigna:340,ICE:ICE:140,MO:Altria:46,BMY:Bristol Myers:45,PYPL:PayPal:65,SAP:SAP:190,ASML:ASML:950,TSM:TSMC:160,NVO:Novo Nordisk:130".split(",");
+const THRESH_DEFAULT=5;
+function rng(s){return function(){s|=0;s=s+0x6D2B79F5|0;let t=Math.imul(s^s>>>15,1|s);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+const R=rng(20261124);
+const gauss=()=>(R()+R()+R()+R()-2)*1.73;
+
+/* ===== Datenquelle =====
+   Hier später echte Daten laden (z.B. Finnhub, Twelve Data, Alpha Vantage), pro Aktie:
+   {t, n, price, prevClose, weekRef, monthRef, hi, lo, vol, cap}
+   Die Demo erzeugt Zufallsdaten. */
+function loadData(){
+  return RAW.map((s,i)=>{
+    const [t,n,b]=s.split(":");const base=+b;
+    let d=gauss()*1.8; if([8,33,57,79,91].includes(i)) d=-(5.5+R()*4);
+    const prev=base, price=prev*(1+d/100);
+    return {t,n,price,prevClose:prev,weekRef:prev*(1+gauss()*3.2/100*-1),monthRef:prev*(1+gauss()*7/100*-1),
+      hi:Math.max(prev,price)*(1+R()*.01),lo:Math.min(prev,price)*(1-R()*.01),
+      vol:Math.round((8+R()*80)*1e6),cap:Math.round(base*(5+R()*60)*1e7)/1e3*10,alerted:false,alertAt:null};
+  });
+}
+let S=loadData(), period="d", alerts=[], thr=THRESH_DEFAULT;
+const pct=(a,b)=>(a/b-1)*100;
+const chg=(s,p)=>pct(s.price,p==="d"?s.prevClose:p==="w"?s.weekRef:s.monthRef);
+const fmt=(v)=>(v>0?"+":"")+v.toFixed(2).replace(".",",")+" %";
+const money=v=>v.toLocaleString("de-DE",{minimumFractionDigits:2,maximumFractionDigits:2});
+const cls=v=>v<0?"dn":"up";
+const $=id=>document.getElementById(id);
+
+function render(){
+  const q=$("q").value.trim().toLowerCase();
+  const list=S.filter(s=>!q||s.t.toLowerCase().includes(q)||s.n.toLowerCase().includes(q))
+    .sort((a,b)=>chg(a,period)-chg(b,period));
+  $("rows").innerHTML=list.map((s,i)=>{
+    const d=chg(s,"d"),w=chg(s,"w"),m=chg(s,"m");
+    return `<tr><td>${i+1}</td><td><b>${s.t}</b></td><td>${s.n}</td><td>${money(s.price)}</td>`+
+    [["d",d],["w",w],["m",m]].map(([k,v])=>`<td class="${cls(v)} ${k===period?"sel":""}">${fmt(v)}</td>`).join("")+`</tr>`;
+  }).join("");
+  $("status").textContent="Top "+S.length+" Aktien · sortiert nach größtem Verlust ("+({d:"heute",w:"Woche",m:"Monat"})[period]+") · Demo-Daten · "+new Date().toLocaleTimeString("de-DE");
+}
+function detail(s){
+  const d=chg(s,"d");
+  return `<h3>⚠ ${s.n} (${s.t}) −${Math.abs(d).toFixed(2).replace(".",",")} % heute</h3>
+  <div class="sub">Alarm ausgelöst um ${s.alertAt||new Date().toLocaleTimeString("de-DE")}</div>
+  <div class="grid">
+  <div><span>Aktueller Kurs</span>${money(s.price)} $</div>
+  <div><span>Schlusskurs gestern</span>${money(s.prevClose)} $</div>
+  <div><span>Tageshoch</span>${money(s.hi)} $</div>
+  <div><span>Tagestief</span>${money(s.lo)} $</div>
+  <div><span>Woche</span><b class="${cls(chg(s,"w"))}">${fmt(chg(s,"w"))}</b></div>
+  <div><span>Monat</span><b class="${cls(chg(s,"m"))}">${fmt(chg(s,"m"))}</b></div>
+  <div><span>Volumen</span>${(s.vol/1e6).toFixed(1).replace(".",",")} Mio.</div>
+  <div><span>Marktkapitalisierung</span>${Math.round(s.cap).toLocaleString("de-DE")} Mrd. $</div></div>
+  <button onclick="closeM()">Schließen</button>`;
+}
+function openM(s){$("modal").innerHTML=detail(s);$("ov").classList.add("show")}
+function closeM(){$("ov").classList.remove("show")}
+$("ov").onclick=e=>{if(e.target.id==="ov")closeM()};
+function renderAlerts(){
+  $("alerts").innerHTML=alerts.length?alerts.map((s,i)=>`<div class="al" onclick="openM(alerts[${i}])"><b>${s.t} · ${s.n}</b><span class="dn">${fmt(chg(s,"d"))}</span> · ${money(s.price)} $ <span class="sub">(${s.alertAt})</span></div>`).join(""):'<div class="empty">Noch keine Alarme.</div>';
+}
+function check(){
+  S.forEach(s=>{
+    const d=chg(s,"d");
+    if(d<=-thr&&!s.alerted){s.alerted=true;s.alertAt=new Date().toLocaleTimeString("de-DE");alerts.unshift(s);renderAlerts();openM(s)}
+  });
+}
+function tick(){
+  S.forEach(s=>{s.price*=1+gauss()*0.0025;s.hi=Math.max(s.hi,s.price);s.lo=Math.min(s.lo,s.price)});
+  check();render();renderAlerts();
+}
+document.querySelectorAll("[data-p]").forEach(b=>b.onclick=()=>{
+  document.querySelectorAll("[data-p]").forEach(x=>x.classList.remove("on"));b.classList.add("on");period=b.dataset.p;render()});
+$("q").oninput=render;
+$("thr").onchange=e=>{thr=Math.max(1,+e.target.value||5);S.forEach(s=>{if(chg(s,"d")>-thr)s.alerted=false});check()};
+$("theme").onclick=()=>{const r=document.documentElement;const dark=getComputedStyle(r).getPropertyValue("--bg").trim()==="#0f1217";r.dataset.theme=dark?"light":"dark"};
+render();check();setInterval(tick,3000);
+</script>
+</body>
+</html>
